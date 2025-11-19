@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ru">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Рабочий календарь</title>
+		<link rel="stylesheet" href="style.css" />
+	</head>
+	<body>
+		<div class="container">
+			<header>
+				<h1 id="current-month"></h1>
+				<h1>Мой рабочий календарь</h1>
+			</header>
+
+			<div class="calendar-controls">
+				<button id="prev-month">← Предыдущий месяц</button>
+				<button id="today">Сегодня</button>
+				<button id="next-month">Следующий месяц →</button>
+			</div>
+
+			<div id="calendar-container">
+				<div class="loading hide-element" id="calendar-loading">
+					Загрузка календаря...
+				</div>
+				<div class="error-handle" id="error-handle"></div>
+				<div class="calendar" id="calendar">
+					<div class="calendar-header">
+						<div>Пн</div>
+						<div>Вт</div>
+						<div>Ср</div>
+						<div>Чт</div>
+						<div>Пт</div>
+						<div>Сб</div>
+						<div>Вс</div>
+					</div>
+					<div id="calendar-body" class="calendar-body"></div>
+				</div>
+			</div>
+
+			<div class="legend">
+				<div class="legend-item">
+					<div class="legend-color work-legend"></div>
+					<span>Рабочий день</span>
+				</div>
+				<div class="legend-item">
+					<div class="legend-color sick-legend"></div>
+					<span>Больничный</span>
+				</div>
+				<div class="legend-item">
+					<div class="legend-color vacation-legend"></div>
+					<span>Отпуск</span>
+				</div>
+				<div class="legend-item">
+					<div class="legend-color weekend-legend"></div>
+					<span>Выходной</span>
+				</div>
+				<div class="legend-item">
+					<div class="legend-color holiday-legend"></div>
+					<span>Праздничный день</span>
+				</div>
+				<div class="legend-item">
+					<div class="legend-color today-legend"></div>
+					<span>Сегодня</span>
+				</div>
+			</div>
+
+			<div class="stats">
+				<div class="stat-card">
+					<span>Баланс часов</span>
+					<div class="stat-value" id="balance-hours">0</div>
+					<div id="balance-status">Норма</div>
+				</div>
+				<div class="stat-card">
+					<span>Отработано часов</span>
+					<div class="stat-value" id="worked-hours">0</div>
+					<div>Норма часов: <span id="required-hours">0</span></div>
+				</div>
+				<div class="stat-card">
+					<span>Больничные дни</span>
+					<div class="stat-value" id="sick-days">0</div>
+					<div>Часов: <span id="sick-hours">0</span></div>
+				</div>
+				<div class="stat-card">
+					<span>Отпускные дни</span>
+					<div class="stat-value" id="vacation-days">0</div>
+					<div>Часов: <span id="vacation-hours">0</span></div>
+				</div>
+			</div>
+
+			<div class="actions">
+				<button id="auto-fill">Автозаполнение смен</button>
+				<button id="clear-month">Очистить месяц</button>
+				<button id="export-data">Экспорт данных</button>
+				<button id="import-data">Импорт данных</button>
+				<button id="refresh-calendar">
+					Обновить производственный календарь
+				</button>
+			</div>
+		</div>
+
+		<div id="menu-context" class="menu-context hide-element">
+			<div class="form-group form-group-inline">
+				<label for="set-work-day">Рабочий</label>
+				<div class="checkbox-button">
+					<input
+						class="switch"
+						type="checkbox"
+						data-action="work"
+						id="set-work-day"
+					/>
+					<label class="switch" for="set-work-day"></label>
+				</div>
+			</div>
+			<div class="form-group form-group-inline">
+				<label for="set-sick-day">Больничный</label>
+				<div class="checkbox-button">
+					<input
+						class="switch"
+						type="checkbox"
+						data-action="sick"
+						id="set-sick-day"
+					/>
+					<label class="switch" for="set-sick-day"></label>
+				</div>
+			</div>
+			<div class="form-group form-group-inline">
+				<label for="set-vacation-day">Отпуск</label>
+				<div class="checkbox-button">
+					<input
+						class="switch"
+						type="checkbox"
+						data-action="vacation"
+						id="set-vacation-day"
+					/>
+					<label class="switch" for="set-vacation-day"></label>
+				</div>
+			</div>
+			<div class="form-group" data-hide-if="set-work-day--false">
+				<input
+					type="button"
+					data-action="edit-hours"
+					value="Изменить часы"
+				/>
+			</div>
+			<div class="form-group">
+				<input
+					type="button"
+					class="clear"
+					data-action="clear"
+					value="Очистить"
+				/>
+			</div>
+		</div>
+
+		<div id="auto-fill-modal" class="modal hide-element">
+			<div class="modal-wrap">
+				<div class="modal-content">
+					<h3>Настройка автозаполнения</h3>
+					<div
+						class="form-group form-group-inline form-group--helper"
+					>
+						<label>
+							Авторасчет
+							<span class="form-group--helper-text">
+								Для каждого соответствующего дня будет
+								выставлены часы:
+								<u>
+									Ваше рабочее время / количество ваших
+									рабочих дней
+								</u>
+							</span>
+						</label>
+						<div class="checkbox-button">
+							<input
+								class="switch"
+								type="checkbox"
+								id="auto-calc-confirm"
+							/>
+							<label
+								class="switch"
+								for="auto-calc-confirm"
+							></label>
+						</div>
+					</div>
+					<div class="form-group">
+						<label>Схема смен</label>
+						<select id="schema-type">
+							<option value="1">1/1</option>
+							<option value="2">2/2</option>
+							<option value="3">3/3</option>
+							<option value="custom">Фиксированная</option>
+						</select>
+					</div>
+					<div class="form-group" data-show-if="schema-type--custom">
+						<label>Выберите дни</label>
+						<div class="checkboxes-wrap-days" id="custom-days">
+							<div class="checkbox-button">
+								<input
+									type="checkbox"
+									id="fixed-day-1"
+									value="1"
+								/>
+								<label for="fixed-day-1">ПН</label>
+							</div>
+							<div class="checkbox-button">
+								<input
+									type="checkbox"
+									id="fixed-day-2"
+									value="2"
+								/>
+								<label for="fixed-day-2">ВТ</label>
+							</div>
+							<div class="checkbox-button">
+								<input
+									type="checkbox"
+									id="fixed-day-3"
+									value="3"
+								/>
+								<label for="fixed-day-3">СР</label>
+							</div>
+							<div class="checkbox-button">
+								<input
+									type="checkbox"
+									id="fixed-day-4"
+									value="4"
+								/>
+								<label for="fixed-day-4">ЧТ</label>
+							</div>
+							<div class="checkbox-button">
+								<input
+									type="checkbox"
+									id="fixed-day-5"
+									value="5"
+								/>
+								<label for="fixed-day-5">ПТ</label>
+							</div>
+							<div class="checkbox-button">
+								<input
+									type="checkbox"
+									id="fixed-day-6"
+									value="6"
+								/>
+								<label for="fixed-day-6">СБ</label>
+							</div>
+							<div class="checkbox-button">
+								<input
+									type="checkbox"
+									id="fixed-day-0"
+									value="0"
+								/>
+								<label for="fixed-day-0">ВС</label>
+							</div>
+						</div>
+					</div>
+					<div class="form-group" data-hide-if="schema-type--custom">
+						<label>Начать заполнение с:</label>
+						<select id="start-day-type">
+							<option value="odd">1-го</option>
+							<option value="even">2-го</option>
+						</select>
+					</div>
+					<div
+						class="form-group"
+						data-hide-if="auto-calc-confirm--false"
+					>
+						<label>Норма часов в день:</label>
+						<input
+							type="number"
+							id="work-hours-per-day"
+							step="0.1"
+							value="7.8"
+							min="1"
+							max="24"
+						/>
+					</div>
+					<div
+						class="form-group"
+						data-hide-if="auto-calc-confirm--true"
+					>
+						<label>Часов в день:</label>
+						<input
+							type="time"
+							id="work-time-per-day"
+							value="10:00"
+						/>
+					</div>
+					<div
+						class="form-group form-group-inline form-group--helper"
+					>
+						<label
+							>Работаю по праздникам<span
+								class="form-group--helper-text"
+								>При включении - официальные праздники также
+								будут заполнятся как рабочие</span
+							></label
+						>
+						<div class="checkbox-button">
+							<input
+								class="switch"
+								type="checkbox"
+								id="holiday-work-confirm"
+							/>
+							<label
+								class="switch"
+								for="holiday-work-confirm"
+							></label>
+						</div>
+					</div>
+					<div class="modal-actions">
+						<button id="confirm-auto-fill">Заполнить</button>
+						<button id="cancel-auto-fill">Отмена</button>
+					</div>
+				</div>
+			</div>
+			<div class="shadow"></div>
+		</div>
+
+		<div id="edit-hours-modal" class="modal hide-element">
+			<div class="modal-wrap">
+				<div class="modal-content">
+					<h3>Изменение продолжительности рабочего дня</h3>
+					<div class="form-group">
+						<label>Дата:</label>
+						<div id="edit-hours-date"></div>
+					</div>
+					<div class="form-group">
+						<label>Продолжительность рабочего дня:</label>
+						<div class="form-group--inline">
+							<input
+								type="time"
+								id="edit-hours-value"
+								min="00:01"
+								max="23:59"
+							/>
+							<span
+								class="clear-time"
+								data-aciton-time="edit-hours-value"
+							></span>
+						</div>
+					</div>
+					<div class="modal-actions">
+						<button id="confirm-edit-hours">Сохранить</button>
+						<button id="cancel-edit-hours">Отмена</button>
+					</div>
+				</div>
+			</div>
+			<div class="shadow"></div>
+		</div>
+
+		<script src="db.js"></script>
+		<script src="cookies.js"></script>
+		<script src="temp.js"></script>
+		<script src="main.js"></script>
+	</body>
+</html>
