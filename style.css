@@ -3,6 +3,7 @@
     --secondary-color: #2980b9;
     --work-day-color: #2ecc71;
     --sick-day-color: #e74c3c;
+    --lock-day-color: #3c72e7;
     --vacation-day-color: #f39c12;
     --weekend-color: rgba(255, 43, 43, 0.62);
     --today-color: #9b59b6;
@@ -16,6 +17,10 @@
     margin: 0;
     padding: 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+h3 {
+    display: flex;
 }
 
 body {
@@ -178,6 +183,10 @@ button:disabled {
 
 .day-type-indicator > [data-indicator='vacation'] {
     background-color: var(--vacation-day-color);
+}
+
+.day-type-indicator > [data-indicator='lock'] {
+    background-color: var(--lock-day-color);
 }
 
 .stats {
@@ -369,7 +378,6 @@ button:disabled {
     margin-bottom: 5px;
     font-weight: bold;
     align-items: center;
-    position: relative;
 }
 
 .form-group select,
@@ -480,7 +488,12 @@ button:disabled {
     transition: .3s ease-in-out;
 }
 
-.form-group--helper > label::after {
+.helper {
+    cursor: pointer;
+    position: relative;
+}
+
+.helper::after {
     content: '?';
     display: flex;
     border-radius: 50%;
@@ -492,15 +505,10 @@ button:disabled {
     margin-left: 5px;
     color: var(--gray-color);
     border: 1px solid var(--gray-color);
+
 }
 
-.form-group--helper > label:hover > .form-group--helper-text,
-.form-group--helper-text:hover {
-    opacity: 1;
-    visibility: visible;
-}
-
-.form-group--helper-text {
+.helper-text {
     position: absolute;
     opacity: 0;
     visibility: hidden;
@@ -513,6 +521,12 @@ button:disabled {
     padding: 5px;
     z-index: 100;
     color: #fff;
+}
+
+.helper:hover > .helper-text,
+.helper-text:hover {
+    opacity: 1;
+    visibility: visible;
 }
 
 .form-group-inline {
@@ -566,11 +580,29 @@ input.switch:checked + label.switch:after {
 }
 
 .error-handle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background-color: rgba(200, 0, 0, 0.92);
+    color: #fff;
+    padding: 12px 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 2000;
+    max-width: 350px;
 }
 
-.error-handle:empty {
-    display: none;
+.error-handle_el__title {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.error-handle_el__text {
+    font-size: 12px;
+    opacity: 0.9;
 }
 
 .form-group--inline {

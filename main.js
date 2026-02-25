@@ -29,6 +29,7 @@ const TYPES_DAY = {
 	work: "Рабочий",
 	sick: "Больничный",
 	vacation: "Отпуск",
+	lock: "Закреплен",
 };
 
 // элементы
@@ -43,7 +44,6 @@ let EL_CALENDAR,
 
 let PRODUCTION_CALENDAR;
 let MONTH_DATA;
-let hash_holidays = {};
 let hash_saved_days = {};
 let currentDate = new Date();
 
@@ -109,7 +109,8 @@ async function saveEditedHours() {
 	const hours_value = timeToFloat(hours_input.value);
 
 	if (isNaN(hours_value)) {
-		alert("Поле времени не должно быть пустым!");
+		errorHandle("Ошибка", "Поле времени не должно быть пустым!");
+		return;
 	}
 
 	const date_formatted = formatDate(date_el);
@@ -140,7 +141,7 @@ function setupEventListeners() {
 		.addEventListener("click", showAutoFillModal);
 	document
 		.getElementById("clear-month")
-		.addEventListener("click", clearCurrentMonth);
+		.addEventListener("click", () => clearCurrentMonth(true));
 	document
 		.getElementById("export-data")
 		.addEventListener("click", exportData);
@@ -204,16 +205,37 @@ function setupEventListeners() {
 	});
 }
 
-// todo
 function errorHandle(text, subtext) {
-	EL_ERROR_HANDLER;
+	const titleEl = EL_ERROR_HANDLER.querySelector(".error-handle_el__title");
+	const textEl = EL_ERROR_HANDLER.querySelector(".error-handle_el__text");
+
+	titleEl.textContent = text;
+	textEl.textContent = subtext || "";
+
+	EL_ERROR_HANDLER.classList.remove("hide-element");
+
+	clearTimeout(EL_ERROR_HANDLER._hideTimeout);
+	EL_ERROR_HANDLER._hideTimeout = setTimeout(() => {
+		EL_ERROR_HANDLER.classList.add("hide-element");
+	}, 4000);
 }
 
 // ok
-function createElement(type, params, element = "div") {
-	const el = document.createElement(element);
+function createTemplateElement(type, params) {
 	const date_formatted = params?.date ? formatDate(params.date) : null;
 	const saved_day = hash_saved_days[date_formatted];
+	let type_element;
+	switch (type) {
+		case "LOAD_FILE":
+			type_element = "input";
+			break;
+		case "EXPORT_FILE":
+			type_element = "a";
+			break;
+		default:
+			type_element = "div";
+	}
+	const el = document.createElement(type_element);
 
 	switch (type) {
 		case "EMPTY_DAY":
@@ -241,45 +263,33 @@ function createElement(type, params, element = "div") {
 				el.classList.add("official-workday");
 			}
 
-			const header = createElement("DAY_HEADER", params);
+			const header = createTemplateElement("DAY_HEADER", params);
 			el.appendChild(header);
 
-			const indicator = createElement("TYPE_INDICATOR", params);
+			const indicator = document.createElement("div");
+			indicator.className = "day-type-indicator";
+			saved_day?.types?.forEach((item) => {
+				const tag = document.createElement("div");
+				tag.setAttribute("data-indicator", item);
+				indicator.appendChild(tag);
+			});
 			el.appendChild(indicator);
 			break;
 		case "DAY_HEADER":
 			el.className = "day-header";
 
-			const el2 = createElement("DAY_HEADER_NUBMER", params);
+			const day_number = document.createElement("div");
+			day_number.className = "day-number";
+			day_number.textContent = params.date.getDate();
 
-			el.appendChild(el2);
+			el.appendChild(day_number);
 			if (saved_day?.workingHours) {
-				const el3 = createElement("DAY_HEADER_WORK_TIME", params);
-				el.appendChild(el3);
+				const day_hours = document.createElement("div");
+				day_hours.textContent = floatToTime(saved_day?.workingHours);
+				day_hours.className = "day-hours";
+				day_hours.title = "Часы работы (клик для редактирования)";
+				el.appendChild(day_hours);
 			}
-			break;
-		case "DAY_HEADER_NUBMER":
-			el.className = "day-number";
-			el.textContent = params.date.getDate();
-			break;
-		case "DAY_HEADER_WORK_TIME":
-			el.textContent = floatToTime(saved_day?.workingHours);
-			el.className = "day-hours";
-			el.title = "Часы работы (клик для редактирования)";
-			break;
-		case "TYPE_INDICATOR":
-			el.className = "day-type-indicator";
-			saved_day?.types?.forEach((item) => {
-				const tag = createElement("TYPE_INDICATOR_TAG", { item: item });
-				el.appendChild(tag);
-			});
-			break;
-		case "TYPE_INDICATOR_TAG":
-			el.setAttribute("data-indicator", params.item);
-			break;
-		case "TYPE_TAG":
-			el.className = `day-type-tag ${params.type}`;
-			el.textContent = TYPES_DAY[params.type] || params.type;
 			break;
 		case "LOAD_FILE":
 			el.type = "file";
@@ -287,7 +297,15 @@ function createElement(type, params, element = "div") {
 			el.multiple = false;
 			el.style.display = "none";
 			break;
-		case "_":
+		case "EXPORT_FILE":
+			const data_str = JSON.stringify(params.data_file, null, 2);
+			const data_blob = new Blob([data_str], { type: params.type_file });
+
+			el.href = URL.createObjectURL(data_blob);
+			el.download = params.file_name;
+			break;
+		case "ERROR":
+			el.className = "";
 			break;
 		case "_":
 			break;
@@ -296,7 +314,7 @@ function createElement(type, params, element = "div") {
 }
 
 // ok Универсальная функция для получения данных месяца
-function setMonthData(year, month) {
+function setMonthData() {
 	if (PRODUCTION_CALENDAR?.year !== currentDate.getFullYear()) {
 		return null;
 	}
@@ -322,6 +340,7 @@ function showAutoFillModal() {
 }
 
 // ok Функция для выполнения автозаполнения с настройками
+// todo optimizatsiya!!!
 async function performAutoFill() {
 	const select_type = EL_AUTOFILL_MODAL.querySelector("#schema-type").value;
 	const checkbox_values = EL_AUTOFILL_MODAL.querySelectorAll(
@@ -351,105 +370,97 @@ async function performAutoFill() {
 	const month = currentDate.getMonth();
 	const last_day = new Date(year, month + 1, 0).getDate();
 
-	let start_day;
-	let step;
-	let count_work_days = 0;
-	let select_days;
-
-	let periods = [];
-	let holiday_array = [
-		0,
-		...Object.keys(
+	const locked_days = await getLockedDaysMonth(year, month);
+	const holidays_array = new Set(
+		Object.keys(
 			!on_holidays ? PRODUCTION_CALENDAR.holidays?.[month] || {} : {}
-		).map((el) => Number(el)),
-		last_day + 1,
-	];
-	holiday_array.sort((a, b) => a - b);
-	for (let i = 1; i < holiday_array.length; i++) {
-		const start = holiday_array[i - 1] + 1;
-		const end = holiday_array[i] - 1;
-
-		if (start <= end) {
-			const segment = Array.from(
-				{ length: end - start + 1 },
-				(_, index) => start + index
-			);
-			periods.push(segment);
-		}
-	}
-	if (select_start_day === "even" && periods[0][0] == 1) {
-		periods[0] = periods[0].slice(1);
-	}
+		).map((el) => Number(el))
+	);
+	const working_days = [];
 
 	if (select_type == "custom") {
-		start_day = 1;
-		step = 0;
-
-		let init_day = new Date(year, month, 1).getDay();
-		select_days = new Set();
+		const select_days = new Set();
 		for (let el_checkbox of checkbox_values) {
 			const selectedDay = Number(el_checkbox.value);
 			select_days.add(selectedDay);
-
-			const firstOccurrence = ((selectedDay - init_day + 7) % 7) + 1;
-			const occurrences =
-				Math.floor((last_day - firstOccurrence) / 7) + 1;
-
-			count_work_days += occurrences;
 		}
-		if (!on_holidays) {
-			count_work_days -= Object.keys(
-				PRODUCTION_CALENDAR.holidays?.[month] || {}
-			)
-				.map((day) => new Date(year, month, day).getDay())
-				.filter((day) => select_days.has(day)).length;
+		for (let current_day = 1; current_day <= last_day; current_day++) {
+			if (locked_days[current_day]) continue;
+			const date = new Date(year, month, current_day);
+			if (
+				select_days.has(date.getDay()) &&
+				(on_holidays || !holidays_array.has(current_day))
+			) {
+				working_days.push(current_day);
+			}
 		}
 	} else {
-		step = Number(select_type);
+		const step = Number(select_type);
+		let cur_step = select_start_day === "even" ? step : 0;
+		let way = select_start_day === "even" ? -1 : 1;
+		let lock_day = null;
+		let skip_day;
+		for (let current_day = 1; current_day <= last_day; current_day++) {
+			if (!on_holidays && holidays_array.has(current_day)) continue;
+			lock_day = locked_days[current_day];
+			skip_day = false;
 
-		for (const segment of periods) {
-			const period_length = segment.length;
-
-			const full_cycles = Math.floor(period_length / (step * 2));
-			const remaining_days = (period_length % step) * 2;
-			count_work_days +=
-				full_cycles * step + Math.min(remaining_days, step);
+			if (lock_day) {
+				skip_day = true;
+				if (
+					(lock_day.types.includes("sick") ||
+						lock_day.types.includes("vacation")) &&
+					way > 0
+				) {
+					cur_step = step;
+					way = -1;
+				} else if (lock_day.types.includes("work") && way < 0) {
+					cur_step = 0;
+					way = 1;
+				}
+			}
+			cur_step += way;
+			if (way > 0 && !skip_day) {
+				working_days.push(current_day);
+			}
+			if (cur_step == 0) {
+				way = 1;
+			} else if (cur_step == step) {
+				way = -1;
+			}
 		}
 	}
-	let current_step = 0;
+
+	let extra_time = 0;
+	for (let day of Object.values(locked_days)) {
+		if (day.types.includes("vacation") || day.types.includes("sick")) {
+			const day_date = new Date(day.date);
+			if (!isWeekend(day_date) && !isHoliday(day_date)) {
+				extra_time += select_hours;
+			}
+		} else {
+			extra_time += day.workingHours || 0;
+		}
+	}
+
 	let output = [];
-	let calc_hours = on_auto_calc
-		? (MONTH_DATA.workingDays * select_hours - MONTH_DATA.shortDays) /
-		  count_work_days
+	const calc_hours = on_auto_calc
+		? (MONTH_DATA.workingDays * select_hours -
+				MONTH_DATA.shortDays -
+				extra_time) /
+		  working_days.length
 		: select_hours;
+	for (const select_day of working_days) {
+		const date = new Date(year, month, select_day);
+		const date_formatted = formatDate(date);
 
-	for (const period of periods) {
-		for (const day of period) {
-			const date = new Date(year, month, day);
-			const date_formatted = formatDate(date);
-
-			if (select_type === "custom" && !select_days.has(date.getDay())) {
-				continue;
-			}
-
-			if (select_type !== "custom") {
-				if (current_step >= step) {
-					current_step++;
-					if (current_step >= step * 2) current_step = 0;
-					continue;
-				}
-				current_step++;
-			}
-			output.push({
-				id: date_formatted,
-				date: date_formatted,
-				types: ["work"],
-				workingHours: calc_hours,
-			});
-		}
-		if (select_type !== "custom") {
-			current_step = 0;
-		}
+		output.push({
+			id: date_formatted,
+			date: date_formatted,
+			types: ["work"],
+			workingHours: calc_hours,
+			lock: false,
+		});
 	}
 	await saveDays(output);
 	await rerender();
@@ -528,7 +539,7 @@ async function updateStats() {
 function hideShowDataset(show) {
 	const showHide = `data-${show ? "show" : "hide"}-if`;
 
-	getValueElement = (el) => {
+	const getValueElement = (el) => {
 		switch (el.type) {
 			case "checkbox":
 				return String(el.checked);
@@ -587,16 +598,21 @@ function hideShowDataset(show) {
 
 // ok Функции для модального окна автозаполнения
 function confirmAutoFill() {
-	const workHours = parseFloat(
-		document.getElementById("work-hours-per-day").value
+	const work_hours = parseFloat(
+		EL_AUTOFILL_MODAL.querySelector("#work-hours-per-day").value
 	);
+	const is_autofill =
+		EL_AUTOFILL_MODAL.querySelector("#auto-calc-confirm").checked;
 
-	if (workHours && workHours > 0) {
+	if (!is_autofill || (work_hours && work_hours > 0)) {
+		if (is_autofill && work_hours > 0) {
+			work_hours_per_day = work_hours;
+		}
 		clearCurrentMonth();
 		performAutoFill();
 		toggleleVisableElement(EL_AUTOFILL_MODAL);
 	} else {
-		alert("Пожалуйста, введите корректное количество часов");
+		errorHandle("Ошибка", "Пожалуйста, введите корректное количество часов");
 	}
 }
 
@@ -624,12 +640,18 @@ async function goToToday() {
 }
 
 // ok Очистка месяца
-async function clearCurrentMonth() {
-	if (confirm("Вы уверены, что хотите очистить все данные за этот месяц?")) {
+async function clearCurrentMonth(lock_clear = false) {
+	let flag = true;
+	if (lock_clear) {
+		flag = confirm(
+			"Вы уверены, что хотите очистить все данные за этот месяц?"
+		);
+	}
+	if (flag) {
 		const year = currentDate.getFullYear();
 		const month = currentDate.getMonth();
 		hash_saved_days = {};
-		await clearMonth(year, month);
+		await clearMonth(year, month, lock_clear);
 		await rerender();
 	}
 }
@@ -660,7 +682,7 @@ async function importData() {
 	};
 
 	const file = await new Promise((resolve) => {
-		const fileInput = createElement("LOAD_FILE", {}, "input");
+		const fileInput = createTemplateElement("LOAD_FILE", {});
 
 		fileInput.addEventListener("change", (event) => {
 			resolve(event.target.files[0]);
@@ -693,11 +715,11 @@ async function importData() {
 			}
 		} catch (error) {
 			console.error("Ошибка импорта:", error);
-			alert(`Ошибка импорта: ${error.message}`);
+			errorHandle("Ошибка импорта", error.message);
 			return;
 		}
 
-		if (data_replaced === "replace") {
+		if (data_replaced) {
 			await clearAllDays();
 		}
 
@@ -713,13 +735,11 @@ async function exportData() {
 	// Формируем данные для экспорта
 	const export_data = await getAllDaysDB();
 
-	// Создаем и скачиваем файл
-	const data_str = JSON.stringify(export_data, null, 2);
-	const data_blob = new Blob([data_str], { type: "application/json" });
-
-	const link = document.createElement("a");
-	link.href = URL.createObjectURL(data_blob);
-	link.download = `dataset-calendar.json`;
+	const link = createTemplateElement("EXPORT_FILE", {
+		data_file: export_data,
+		type_file: "application/json",
+		file_name: "dataset-calendar.json",
+	});
 	link.click();
 }
 
@@ -749,7 +769,6 @@ function getHolidayInfo(date) {
 
 // ok
 async function setDaysForMonth() {
-	console.log("ZZ", currentDate.getMonth());
 	hash_saved_days = await getDaysForMonthDB(
 		currentDate.getFullYear(),
 		currentDate.getMonth()
@@ -814,7 +833,7 @@ async function renderCalendar() {
 
 	// Добавляем пустые ячейки
 	for (let i = 0; i < first_day_week; i++) {
-		const empty_day = createElement("EMPTY_DAY");
+		const empty_day = createTemplateElement("EMPTY_DAY");
 		fragment.appendChild(empty_day);
 	}
 
@@ -824,7 +843,7 @@ async function renderCalendar() {
 
 		const saved_day = hash_saved_days[date_formatted];
 
-		const day_el = createElement("FILL_DAY", { date: date });
+		const day_el = createTemplateElement("FILL_DAY", { date: date });
 
 		if (saved_day?.workingHours) {
 			day_el
@@ -930,6 +949,7 @@ async function handleContextMenuAction(action) {
 	);
 
 	let work_time = null;
+	let add_tag = null;
 
 	switch (action) {
 		case "work":
@@ -939,8 +959,7 @@ async function handleContextMenuAction(action) {
 		case "sick":
 		case "vacation":
 			context_menu_current_element.classList.toggle(action);
-			const add_tag =
-				context_menu_current_element.classList.contains(action);
+			add_tag = context_menu_current_element.classList.contains(action);
 			// Получаем текущие типы
 			await saveDays([
 				{
@@ -950,6 +969,11 @@ async function handleContextMenuAction(action) {
 					workingHours: work_time,
 				},
 			]);
+			break;
+		case "lock":
+			context_menu_current_element.classList.toggle(action);
+			add_tag = context_menu_current_element.classList.contains(action);
+			await updateDay(date_formatted, { lock: add_tag });
 			break;
 		case "edit-hours":
 			toggleleVisableElement(EL_CONTEXT_MENU, true);

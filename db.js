@@ -1,7 +1,16 @@
 const DB_NAME = "WorkCalendarDB";
-const DB_VERSION = 1; // Увеличиваем версию для добавления нового хранилища
+const DB_VERSION = 2;
 const DAYS_STORE_NAME = "days";
-const CALENDAR_STORE_NAME = "production_calendars"; // Новое хранилище для календарей
+const CALENDAR_STORE_NAME = "production_calendars";
+
+const DEFAULT_STRUCTURE_DAY = {
+	date: null,
+	types: [],
+	workingHours: 0,
+	lock: false,
+};
+
+let db;
 
 //ok Инициализация IndexedDB
 async function initDB() {
@@ -11,32 +20,31 @@ async function initDB() {
 		request.onerror = () => reject(request.error);
 		request.onsuccess = () => {
 			db = request.result;
-			resolve(db);
+			resolve();
 		};
 
 		request.onupgradeneeded = (event) => {
-			const db = event.target.result;
+			const database = event.target.result;
+			const oldVersion = event.oldVersion;
+			const newVersion = event.newVersion;
 
-			// Создаем хранилище для дней, если его нет
-			if (!db.objectStoreNames.contains(DAYS_STORE_NAME)) {
-				const store = db.createObjectStore(DAYS_STORE_NAME, {
-					keyPath: "id",
-				});
-				store.createIndex("date", "date", { unique: false });
-			}
-
-			// Создаем хранилище для производственных календарей
-			if (!db.objectStoreNames.contains(CALENDAR_STORE_NAME)) {
-				const calendarStore = db.createObjectStore(
-					CALENDAR_STORE_NAME,
-					{
-						keyPath: "year",
-					}
-				);
-				calendarStore.createIndex("year", "year", { unique: true });
+			for (let version = oldVersion; version < newVersion; version++) {
+				migrateFromVersion(database, event.target.transaction, version);
 			}
 		};
 	});
+}
+function migrateFromVersion(database, transaction, fromVersion) {
+	switch (fromVersion) {
+		case 0:
+			migrateFrom0To1(database, transaction);
+			break;
+		case 1:
+			migrateFrom1To2(database, transaction);
+			break;
+		default:
+			console.warn(`No migration defined from version ${fromVersion}`);
+	}
 }
 
 // ok-neok Загрузка производственного календаря
@@ -191,9 +199,11 @@ async function saveDaysFromImport(parsedData) {
 		if (parsedData.db_name != DB_NAME)
 			reject(new Error("Данные не для этой базы"));
 		if (parsedData.db_v != DB_VERSION)
-			reject(new Error("Версия базы не соответствует")); // тут нужна будет миграция, если буду обновлять приложуху
+			reject(new Error("Версия базы не соответствует"));
 
-		saveDays.then((res) => resolve(res)).catch((err) => reject(err));
+		saveDays(parsedData.data)
+			.then((res) => resolve(res))
+			.catch((err) => reject(err));
 	});
 }
 
@@ -218,7 +228,7 @@ async function clearAllDays() {
 	});
 }
 
-async function clearMonth(year, month) {
+async function clearMonth(year, month, lock_clear) {
 	return new Promise((resolve, reject) => {
 		const startDate = new Date(year, month, 1);
 		const endDate = new Date(year, month + 1, 0);
@@ -237,7 +247,9 @@ async function clearMonth(year, month) {
 		request.onsuccess = (event) => {
 			const cursor = event.target.result;
 			if (cursor) {
-				cursor.delete();
+				if (lock_clear || !cursor.value.lock) {
+					cursor.delete();
+				}
 				cursor.continue();
 			} else {
 				resolve();
@@ -264,26 +276,9 @@ async function saveDays(days) {
 		};
 
 		days.forEach((dayData) => {
-			const request = store.put(dayData);
+			const request = store.put({ ...DEFAULT_STRUCTURE_DAY, ...dayData });
 			request.onerror = () => errorCount++;
 		});
-	});
-}
-
-async function deleteWorkByDate(date) {
-	return new Promise((resolve, reject) => {
-		const transaction = db.transaction([DAYS_STORE_NAME], "readwrite");
-		const store = transaction.objectStore(DAYS_STORE_NAME);
-
-		const request = store.delete(date);
-
-		request.onsuccess = () => {
-			resolve(true);
-		};
-
-		request.onerror = () => {
-			reject(request.error);
-		};
 	});
 }
 
@@ -309,7 +304,6 @@ async function resetWorkData(date) {
 		const transaction = db.transaction([DAYS_STORE_NAME], "readwrite");
 		const store = transaction.objectStore(DAYS_STORE_NAME);
 
-		// 1. Получаем текущую запись
 		const getRequest = store.get(date);
 
 		getRequest.onsuccess = () => {
@@ -334,7 +328,6 @@ async function resetWorkData(date) {
 			const putRequest = store.put(updatedData);
 
 			putRequest.onsuccess = () => {
-				console.log(`Данные работы удалены из записи ${date}`);
 				resolve(updatedData);
 			};
 
@@ -342,5 +335,78 @@ async function resetWorkData(date) {
 		};
 
 		getRequest.onerror = () => reject(getRequest.error);
+	});
+}
+
+async function updateDay(date, params) {
+	return new Promise((resolve, reject) => {
+		const transaction = db.transaction([DAYS_STORE_NAME], "readwrite");
+		const store = transaction.objectStore(DAYS_STORE_NAME);
+
+		const getRequest = store.get(date);
+
+		getRequest.onsuccess = () => {
+			const existingData = getRequest.result;
+
+			if (!existingData) {
+				reject(new Error(`Запись с датой ${date} не найдена`));
+				return;
+			}
+
+			const updatedData = {
+				...existingData,
+				...params,
+				id: existingData.id,
+			};
+
+			const putRequest = store.put(updatedData);
+
+			putRequest.onsuccess = () => {
+				resolve(updatedData);
+			};
+
+			putRequest.onerror = (event) => {
+				reject(
+					new Error(
+						`Ошибка при сохранении данных: ${event.target.error}`
+					)
+				);
+			};
+		};
+	});
+}
+
+async function getLockedDaysMonth(year, month) {
+	return new Promise((resolve, reject) => {
+		const startDate = formatDate(new Date(year, month, 1));
+		const endDate = formatDate(new Date(year, month + 1, 0));
+
+		const transaction = db.transaction([DAYS_STORE_NAME], "readonly");
+		const store = transaction.objectStore(DAYS_STORE_NAME);
+		const index = store.index("date");
+		const range = IDBKeyRange.bound(startDate, endDate);
+
+		const request = index.getAll(range);
+
+		request.onerror = () => reject(request.error);
+		request.onsuccess = () => {
+			const lockedDays = request.result.filter(
+				(day) => day.lock === true
+			);
+
+			const daysMap = {};
+			lockedDays.forEach((day) => {
+				let day_number;
+				if (typeof day.date === "string") {
+					day_number = day.date.split("-")[2];
+				} else {
+					day_number = new Date(day.date).getDate();
+				}
+				// Если дата уже в формате числа или объекта Date
+				daysMap[Number(day_number)] = day;
+			});
+
+			resolve(daysMap);
+		};
 	});
 }

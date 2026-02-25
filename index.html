@@ -23,7 +23,6 @@
 				<div class="loading hide-element" id="calendar-loading">
 					Загрузка календаря...
 				</div>
-				<div class="error-handle" id="error-handle"></div>
 				<div class="calendar" id="calendar">
 					<div class="calendar-header">
 						<div>Пн</div>
@@ -143,6 +142,18 @@
 					value="Изменить часы"
 				/>
 			</div>
+			<div class="form-group form-group-inline">
+				<label for="set-lock-day">Закрепить изменения</label>
+				<div class="checkbox-button">
+					<input
+						class="switch"
+						type="checkbox"
+						data-action="lock"
+						id="set-lock-day"
+					/>
+					<label class="switch" for="set-lock-day"></label>
+				</div>
+			</div>
 			<div class="form-group">
 				<input
 					type="button"
@@ -156,13 +167,17 @@
 		<div id="auto-fill-modal" class="modal hide-element">
 			<div class="modal-wrap">
 				<div class="modal-content">
-					<h3>Настройка автозаполнения</h3>
-					<div
-						class="form-group form-group-inline form-group--helper"
-					>
-						<label>
+					<h3 class="helper">
+						Настройка автозаполнения
+						<span class="helper-text">
+							При автозаполнении - все
+							<u>не закрепленные</u> дни будут очищены
+						</span>
+					</h3>
+					<div class="form-group form-group-inline">
+						<label class="helper">
 							Авторасчет
-							<span class="form-group--helper-text">
+							<span class="helper-text">
 								Для каждого соответствующего дня будет
 								выставлены часы:
 								<u>
@@ -285,12 +300,9 @@
 							value="10:00"
 						/>
 					</div>
-					<div
-						class="form-group form-group-inline form-group--helper"
-					>
-						<label
-							>Работаю по праздникам<span
-								class="form-group--helper-text"
+					<div class="form-group form-group-inline">
+						<label class="helper"
+							>Работаю по праздникам<span class="helper-text"
 								>При включении - официальные праздники также
 								будут заполнятся как рабочие</span
 							></label
@@ -348,9 +360,16 @@
 			<div class="shadow"></div>
 		</div>
 
+		<div class="error-handle hide-element" id="error-handle">
+			<div class="error-handle_el">
+				<div class="error-handle_el__title"></div>
+				<div class="error-handle_el__text"></div>
+			</div>
+		</div>
+
+		<script src="migrations.js"></script>
 		<script src="db.js"></script>
 		<script src="cookies.js"></script>
-		<script src="temp.js"></script>
 		<script src="main.js"></script>
 	</body>
 </html>
